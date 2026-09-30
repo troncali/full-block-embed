@@ -2,7 +2,7 @@
 
 [![Latest release](https://img.shields.io/github/v/release/troncali/full-block-embed?sort=semver)](https://github.com/troncali/full-block-embed/releases/latest)
 [![Downloads](https://img.shields.io/badge/dynamic/json?logo=obsidian&color=%23483699&label=downloads&query=%24%5B%22full-block-embed%22%5D.downloads&url=https%3A%2F%2Fraw.githubusercontent.com%2Fobsidianmd%2Fobsidian-releases%2Fmaster%2Fcommunity-plugin-stats.json)](https://obsidian.md/plugins?id=full-block-embed)
-[![Lint & Tests](https://github.com/troncali/full-block-embed/actions/workflows/lint.yml/badge.svg?branch=main)](https://github.com/troncali/full-block-embed/actions/workflows/lint.yml)
+[![Lint & Tests](https://github.com/troncali/full-block-embed/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/troncali/full-block-embed/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/github/license/troncali/full-block-embed)](LICENSE)
 
 Embed the full Markdown of a source block in other Obsidian notes and keep every copy synchronized. Each reference contains ordinary Markdown so notes remain complete and readable in other editors, renderers, scripts, and LLM workflows.
