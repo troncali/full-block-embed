@@ -1,6 +1,6 @@
 # Third-party notices
 
-Full Block Embed incorporates ideas and adapted implementation work from the following projects. Both are distributed under the MIT License. Their copyright notices and the applicable MIT terms are preserved below and in the repository's `LICENSE` file.
+Full Block Embed incorporates ideas and adapted implementation work from the following projects. Both are distributed under the MIT License. Their copyright notices and the applicable MIT terms are preserved below.
 
 ## Sync Embeds
 

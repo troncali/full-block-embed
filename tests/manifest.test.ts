@@ -28,12 +28,13 @@ test('license preserves current and upstream attribution', async () => {
 		readFile('THIRD_PARTY_NOTICES.md', 'utf8'),
 	]);
 
-	for (const notice of [
-		'Copyright (c) 2026 Matt Troncali',
-		'See ./THIRD_PARTY_NOTICES.md for license notices and the upstream projects',
-		'copyright (c) 2025 Verity, 2026 Siulved54',
-	])
+	for (const notice of ['Copyright (c) 2026 Matt Troncali'])
 		assert.match(license, new RegExp(notice.replace(/[()]/g, '\\$&')));
+	for (const upstream of [
+		'Copyright (c) 2025 Verity',
+		'Copyright (c) 2026 Siulved54',
+	])
+		assert.match(notices, new RegExp(upstream.replace(/[()]/g, '\\$&')));
 	assert.match(notices, /github\.com\/uthvah\/sync-embeds/);
 	assert.match(
 		notices,
