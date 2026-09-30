@@ -119,7 +119,7 @@ export function parseFile(path: string, text: string): ParseResult {
 				bodyStart: currentLine.next,
 			});
 		} else if (end) {
-			const current = open.at(-1);
+			const current = open[open.length - 1];
 			if (!current || current.id !== end[1]!) {
 				errors.push(
 					`${path}:${i + 1}: orphan closing marker for ${end[1]} (opening marker is missing)`,
