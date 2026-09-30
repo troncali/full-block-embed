@@ -69,17 +69,22 @@ export class SourceEditor {
 					),
 				),
 			});
-			view.containerEl.addClass('full-block-embed-embedded-view');
-			view.containerEl.toggleClass(
+			const editorEl = editor.cm.dom.closest<HTMLElement>(
+				'.markdown-source-view',
+			);
+			if (!editorEl)
+				throw new Error('Obsidian editor container is not ready');
+			editorEl.addClass('full-block-embed-embedded-view');
+			editorEl.toggleClass(
 				'full-block-embed-embedded-live-preview',
 				livePreview,
 			);
-			view.containerEl.toggleClass(
+			editorEl.toggleClass(
 				'full-block-embed-embedded-source-mode',
 				!livePreview,
 			);
 			loading.remove();
-			container.appendChild(view.containerEl);
+			container.appendChild(editorEl);
 			window.requestAnimationFrame(() => {
 				const latest = parseFile(
 					source.file.path,

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.1
+
+- Fix embedded editor in `src/source-editor.ts` to mount only the Markdown editor subtree instead of the full-height workspace leaf and simplified CSS, which resolves CSS lint error by allowing the removal of `!important` overrides
+- Fix type error at `src/block.ts:122`
+- Moved upstream license information entirely to THIRD_PARTY_NOTICES.md and updated test
+
 ## 1.0.0
 
 - Synchronize the full Markdown between one source and any number of references, in both directions.
