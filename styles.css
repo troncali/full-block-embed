@@ -30,7 +30,7 @@
 }
 
 .full-block-embed-editing-reference,
-.full-block-embed-editing-reference {
+.markdown-reading-view .full-block-embed-reference {
 	background-color: color-mix(
 		in srgb,
 		var(--text-highlight-bg) 25%,
@@ -147,6 +147,11 @@
 	max-height: none;
 	min-height: 0;
 	padding: 0;
+}
+
+.full-block-embed-embedded-view {
+	/* The phone layout adds room for the floating view header here. */
+	--view-top-spacing-markdown: 0;
 }
 
 .full-block-embed-editor {

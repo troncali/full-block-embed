@@ -1,7 +1,7 @@
 {
 	"id": "full-block-embed",
 	"name": "Full Block Embed",
-	"version": "1.0.1",
+	"version": "1.0.2",
 	"minAppVersion": "1.1.0",
 	"description": "Embed the full Markdown of a source block in other notes and keep every copy syncronized. Because each reference contains ordinary Markdown, notes remain complete and readable in other editors, renderers, scripts, and LLM workflows.",
 	"author": "Matt Troncali",

@@ -196,7 +196,7 @@ A full plan is good for user review and an LLM in some contexts, but only some s
 
 ### Code Contributions
 
-Fork the repository, create a branch, and open a pull request. Before submitting, please ensure `npm test` and `npm run build` pass.
+Fork the repository, create a branch, and open a pull request. Before submitting, please ensure `npm run test` and `npm run build` pass.
 
 ### Local Development
 
@@ -228,6 +228,6 @@ npm run version # increment the plugin version
 
 ### License & Provenance
 
-Full Block Embed is © 2026 Matt Troncali and released under the MIT License. It incorporates ideas and adapted implementation work from [Sync Embeds](https://github.com/uthvah/sync-embeds) and [Shared Blocks](https://github.com/perezamadorluisenrique-gif/shared-blocks), both MIT-licensed. Their copyright notices are preserved in [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Full Block Embed is © 2026 Matt Troncali and released under the MIT License. It incorporates ideas and adapted implementation work from [Sync Embeds](https://github.com/uthvah/sync-embeds) and [Shared Blocks](https://github.com/perezamadorluisenrique-gif/shared-blocks), both MIT-licensed. Their copyright notices are preserved in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 <sup>[Back to Top](#full-block-embed)</sup>

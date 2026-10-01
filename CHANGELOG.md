@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.2
+
+- Fix embedded editor top spacing for mobile
+- Fix faint highlight background for reference blocks in reading mode
+- Fix README typos
+
 ## 1.0.1
 
 - Fix embedded editor in `src/source-editor.ts` to mount only the Markdown editor subtree instead of the full-height workspace leaf and simplified CSS, which resolves CSS lint error by allowing the removal of `!important` overrides
