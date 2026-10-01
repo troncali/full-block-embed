@@ -2,12 +2,13 @@
 
 ## Unreleased
 
-- Fix embedded reference editors to accept spaces and mouse input after activation and update in place during synchronization, preserving focus and cursor position.
-- Support up to three leading spaces on markers and prevent newly created marker lines from inheriting incidental indentation.
-- Refresh Reading-mode blocks from current synchronized content, with batched rerenders after Obsidian save events.
-- Keep Reading mode read-only while synchronizing actual editor buffers bidirectionally, updating all open buffers and retrying concurrent writes.
-- Prefer active Obsidian edits over stale Reading-mode content and baselines while still detecting genuinely divergent active edits.
-- Resume synchronization automatically when all copies become identical after a conflict.
+- Fix embedded reference editors to accept spaces and mouse input after activation and update in place during synchronization, preserving focus and cursor position
+- Support up to three leading spaces on markers and prevent newly created marker lines from inheriting incidental indentation
+- Refresh Reading-mode blocks from current synchronized content, with batched rerenders after Obsidian save events
+- Keep Reading mode read-only while synchronizing actual editor buffers bidirectionally, updating all open buffers and retrying concurrent writes
+- Prefer active Obsidian edits over stale Reading-mode content and baselines while still detecting genuinely divergent active edits
+- Resume synchronization automatically when all copies become identical after a conflict
+- Fix block rendering to show reference markers in source-edit mode
 
 ## 1.0.2
 

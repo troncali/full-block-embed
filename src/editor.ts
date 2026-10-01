@@ -172,7 +172,7 @@ function decorations(
 	const livePreview = state.field(editorLivePreviewField, false) ?? false;
 	const blocks = parseFile(path, text).blocks;
 	for (const block of blocks) {
-		if (block.kind === '=') {
+		if (block.kind === '=' && livePreview) {
 			// The outer widget renders its complete Markdown body. Decorating a
 			// nested reference as well would create overlapping atomic ranges.
 			if (
