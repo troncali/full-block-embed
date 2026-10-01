@@ -1,11 +1,13 @@
 # Full Block Embed
 
 [![Latest release](https://img.shields.io/github/v/release/troncali/full-block-embed?sort=semver)](https://github.com/troncali/full-block-embed/releases/latest)
-[![Downloads](https://img.shields.io/badge/dynamic/json?logo=obsidian&color=%23483699&label=downloads&query=%24%5B%22full-block-embed%22%5D.downloads&url=https%3A%2F%2Fraw.githubusercontent.com%2Fobsidianmd%2Fobsidian-releases%2Fmaster%2Fcommunity-plugin-stats.json)](https://obsidian.md/plugins?id=full-block-embed)
+[![Downloads](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fobsidianmd%2Fobsidian-releases%2Frefs%2Fheads%2Fmaster%2Fcommunity-plugin-stats.json&query=%24%5B%22full-block-embed%22%5D.downloads&logo=obsidian&label=downloads&color=483699)](https://obsidian.md/plugins?id=full-block-embed)
 [![Lint & Tests](https://github.com/troncali/full-block-embed/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/troncali/full-block-embed/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/github/license/troncali/full-block-embed)](LICENSE)
 
 Embed the full Markdown of a source block in other Obsidian notes and keep every copy synchronized. Each reference contains ordinary Markdown so notes remain complete and readable in other editors, renderers, scripts, and LLM workflows.
+
+![Create, insert, and synchronize a full block embed](assets/full-block-embed-demo.gif)
 
 - [Why](#why)
 - [Install](#install)
@@ -84,7 +86,7 @@ All blocks highlight on hover. Reference blocks also reveal buttons to open the 
 
 ### Block Structure
 
-Blocks are delimited by single-line HTML comment markers that only show in source view. Markers must be on their own lines and be comprised of the components below _without any spaces_. Malformed markers or unclosed blocks are reported as errors.
+Blocks are delimited by single-line HTML comment markers that only show in source view. Markers must be on their own lines and be comprised of the components below _without internal spaces_. Up to three leading spaces are accepted as standard Markdown indentation. Malformed markers or unclosed blocks are reported as errors.
 
 <!-- prettier-ignore -->
 | Marker Component | Explanation |
@@ -184,7 +186,7 @@ A full plan is good for user review and an LLM in some contexts, but only some s
 
 - **Nested Blocks** – blocks may be nested. Nested children synchronize before parents. When a parent source block contains child source blocks, the child source markers change from `+` to `=` when copied to reference blocks.
 
-- **Conflict Behavior** – The plugin never chooses a winner for divergent copies and raises an error for circular nesting, malformed or unclosed markers, duplicate sources, and missing sources. A conflict or error pauses writes and shows a notice; the console lists affected block names and files.
+- **Conflict Behavior** – The plugin never chooses a winner for divergent copies and raises an error for circular nesting, malformed or unclosed markers, duplicate sources, and missing sources. A conflict or error pauses writes and shows a notice. Issues can be opened with the command `Open first shared block sync issue`. If every copy is later made identical, that content becomes the new synchronization baseline automatically and clears the conflict.
 
 - **Editing Outside Obsidian** – blocks synchronize when a note is opened in Obsidian, or a vault-wide sync can be manually triggered. Conflicting copies raise warnings without overwriting. Newly inserted reference blocks are hydrated from the source block.
 

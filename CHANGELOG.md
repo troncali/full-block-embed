@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.0.3
 
 - Fix embedded reference editors to accept spaces and mouse input after activation and update in place during synchronization, preserving focus and cursor position
 - Support up to three leading spaces on markers and prevent newly created marker lines from inheriting incidental indentation
@@ -9,6 +9,7 @@
 - Prefer active Obsidian edits over stale Reading-mode content and baselines while still detecting genuinely divergent active edits
 - Resume synchronization automatically when all copies become identical after a conflict
 - Fix block rendering to show reference markers in source-edit mode
+- Add demo image
 
 ## 1.0.2
 
