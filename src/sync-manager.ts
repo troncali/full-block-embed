@@ -20,7 +20,7 @@ import {
 export type { LegacyStoredSyncData } from './sync-state';
 
 const INDEX_CHUNK_SIZE = 50;
-const SYNC_DELAY = 250;
+const SYNC_DELAY = 100;
 const MARKER_ID = /<!--#\/?([^\s>]+?)(?=[+=/]|-->|\s)/g;
 
 export interface LiveDocument {
@@ -33,6 +33,7 @@ interface Observation {
 	ids: Set<string>;
 	text: string;
 	document?: LiveDocument;
+	revision: number;
 }
 
 interface IndexedFile {
@@ -45,7 +46,10 @@ interface IndexedFile {
 export interface SyncManagerCallbacks {
 	onIssues(errors: string[]): void;
 	onClearIssues(): void;
+	onFilesChanged(files: FileText[]): void;
 }
+
+class ConcurrentEditError extends Error {}
 
 /**
  * Keeps a disk-backed structural index and validates it only when a displayed
@@ -71,6 +75,7 @@ export class BlockSyncManager {
 	private dirtyTimer: number | null = null;
 	private running = false;
 	private rerun = false;
+	private observationRevision = 0;
 
 	constructor(
 		private plugin: Plugin,
@@ -124,7 +129,13 @@ export class BlockSyncManager {
 		if (editedInObsidian && previous?.path === path)
 			for (const key of changedBlockKeys(path, previous.text, text))
 				this.localChanges.add(key);
-		this.observations.set(owner, { path, ids, text, document });
+		this.observations.set(owner, {
+			path,
+			ids,
+			text,
+			document,
+			revision: ++this.observationRevision,
+		});
 		this.indexParsed(path, text, parsed.blocks);
 		this.rebuildActiveIds();
 		const requested = new Set([...ids, ...(previous?.ids ?? [])]);
@@ -209,6 +220,13 @@ export class BlockSyncManager {
 		return this.readFiles(this.pathsById.get(id) ?? new Set());
 	}
 
+	async readCurrentText(path: string): Promise<string | null> {
+		const live = this.liveDocument(path);
+		if (live) return live.read();
+		const file = this.plugin.app.vault.getAbstractFileByPath(path);
+		return file instanceof TFile ? this.plugin.app.vault.read(file) : null;
+	}
+
 	async replaceFileText(
 		path: string,
 		expected: string,
@@ -223,6 +241,7 @@ export class BlockSyncManager {
 		};
 		await this.applyFilePatches(path, [patch], [{ path, text: expected }]);
 		await this.persist();
+		this.callbacks.onFilesChanged([{ path, text: replacement }]);
 	}
 
 	async forget(id: string): Promise<void> {
@@ -331,8 +350,22 @@ export class BlockSyncManager {
 			this.knownRefs = nextRefs;
 			this.clearLocalChanges(ids);
 			this.refreshSavedSourcePaths(ids);
+			const changedPaths = new Set(
+				stages.flatMap((stage) => [...stage.patchesByPath.keys()]),
+			);
+			this.callbacks.onFilesChanged(
+				scanned.filter((file) => changedPaths.has(file.path)),
+			);
 			await this.persist();
 		} catch (error) {
+			if (error instanceof ConcurrentEditError) {
+				// The vault changed between the read and guarded write. Rebuild the
+				// plan from the new contents instead of surfacing a transient error
+				// and leaving the copies permanently unsynchronized.
+				for (const id of ids) this.queuedIds.add(id);
+				this.rerun = true;
+				return;
+			}
 			console.error(
 				'Full Block Embed: synchronization interrupted',
 				error,
@@ -392,29 +425,59 @@ export class BlockSyncManager {
 		const expected = scanned.find((file) => file.path === path)?.text;
 		if (expected === undefined)
 			throw new Error(`Scanned note disappeared: ${path}`);
-		const live = this.liveDocument(path);
-		if (live && live.read() === expected && live.apply(patches)) {
-			this.indexText(path, applyPatches(expected, patches));
+		const updated = applyPatches(expected, patches);
+		const live = this.liveDocuments(path);
+		if (live.length) {
+			// A file can be represented by more than one open editor (for example,
+			// a normal source note and an embedded reference editor). Validate all
+			// buffers before changing any of them, then keep every matching buffer
+			// together so an older view cannot later overwrite the synchronized one.
+			const texts = live.map((document) => document.read());
+			if (texts.some((text) => text !== expected && text !== updated))
+				throw new ConcurrentEditError(`Concurrent edit in ${path}`);
+			if (
+				!live.every(
+					(document) => {
+						const current = document.read();
+						return (
+							current === updated ||
+							(current === expected && document.apply(patches))
+						);
+					},
+				)
+			)
+				throw new ConcurrentEditError(`Concurrent edit in ${path}`);
+			this.indexText(path, updated);
 			return;
 		}
 		const file = this.plugin.app.vault.getAbstractFileByPath(path);
 		if (!(file instanceof TFile))
 			throw new Error(`Note disappeared: ${path}`);
-		let updated = expected;
+		let written = expected;
 		await this.plugin.app.vault.process(file, (current) => {
 			if (current !== expected)
-				throw new Error(`Concurrent edit in ${path}; retrying`);
-			updated = applyPatches(current, patches);
-			return updated;
+				throw new ConcurrentEditError(`Concurrent edit in ${path}`);
+			written = applyPatches(current, patches);
+			return written;
 		});
-		this.indexText(path, updated, file.stat.mtime, file.stat.size);
+		this.indexText(path, written, file.stat.mtime, file.stat.size);
 	}
 
 	private liveDocument(path: string): LiveDocument | undefined {
-		return [...this.observations.values()].find(
-			(observation) =>
-				observation.path === path && observation.document !== undefined,
-		)?.document;
+		return this.liveDocuments(path)[0];
+	}
+
+	private liveDocuments(path: string): LiveDocument[] {
+		return [...this.observations.values()]
+			.filter(
+				(
+					observation,
+				): observation is Observation & { document: LiveDocument } =>
+					observation.path === path &&
+					observation.document !== undefined,
+			)
+			.sort((a, b) => b.revision - a.revision)
+			.map((observation) => observation.document);
 	}
 
 	private async readFiles(paths: Iterable<string>): Promise<FileText[]> {
@@ -540,8 +603,7 @@ export class BlockSyncManager {
 	private async scanFile(file: TFile): Promise<void> {
 		try {
 			const live = this.liveDocument(file.path);
-			const text =
-				live?.read() ?? (await this.plugin.app.vault.cachedRead(file));
+			const text = live?.read() ?? (await this.plugin.app.vault.read(file));
 			this.indexText(file.path, text, file.stat.mtime, file.stat.size);
 		} catch (error) {
 			console.error(

@@ -2,6 +2,7 @@ import { EditorView as CodeMirrorEditorView } from '@codemirror/view';
 import {
 	Component,
 	Editor,
+	MarkdownView,
 	MarkdownRenderer,
 	Menu,
 	Notice,
@@ -26,6 +27,8 @@ export default class FullBlockEmbed extends Plugin {
 	private lastError = '';
 	private lastIssues: string[] = [];
 	private readingView: ReadingViewRenderer | null = null;
+	private pendingReadingFiles = new Map<string, string | undefined>();
+	private readingRefreshFrame: number | null = null;
 	private sourceEditor!: SourceEditor;
 	private sync!: BlockSyncManager;
 
@@ -36,14 +39,17 @@ export default class FullBlockEmbed extends Plugin {
 				this.lastError = '';
 				this.lastIssues = [];
 			},
+			onFilesChanged: (files) => this.refreshReadingViews(files),
 		});
 		this.sync.load((await this.loadData()) as LegacyStoredSyncData | null);
 		this.sourceEditor = new SourceEditor(this.app, (id) =>
 			this.sync.findSource(id),
 		);
 		const changed = (file: unknown) => {
-			if (file instanceof TFile && file.extension === 'md')
+			if (file instanceof TFile && file.extension === 'md') {
 				this.sync.markModified(file);
+				void this.refreshReadingView(file.path);
+			}
 		};
 		this.registerEvent(this.app.vault.on('modify', changed));
 		this.registerEvent(this.app.vault.on('create', changed));
@@ -219,8 +225,64 @@ export default class FullBlockEmbed extends Plugin {
 		);
 	}
 	onunload(): void {
+		if (this.readingRefreshFrame !== null)
+			window.cancelAnimationFrame(this.readingRefreshFrame);
+		this.readingRefreshFrame = null;
+		this.pendingReadingFiles.clear();
 		this.sync.unload();
 		this.readingView = null;
+	}
+
+	private refreshReadingViews(
+		files: Array<{ path: string; text?: string }>,
+	): void {
+		if (!files.length) return;
+		for (const file of files) {
+			const pending = this.pendingReadingFiles.get(file.path);
+			// A synchronized buffer is more current than a save notification that
+			// happens to arrive in the same animation frame.
+			this.pendingReadingFiles.set(file.path, file.text ?? pending);
+			this.readingView?.invalidate(file.path);
+		}
+		if (this.readingRefreshFrame !== null) return;
+		this.readingRefreshFrame = window.requestAnimationFrame(() => {
+			this.readingRefreshFrame = null;
+			const changed = new Map(this.pendingReadingFiles);
+			this.pendingReadingFiles.clear();
+			this.app.workspace.iterateAllLeaves((leaf) => {
+				const view = leaf.view;
+				if (
+					view instanceof MarkdownView &&
+					view.getMode() === 'preview' &&
+					view.file &&
+					changed.has(view.file.path)
+				) {
+					const text = changed.get(view.file.path);
+					if (
+						text !== undefined &&
+						view.previewMode.get() !== text
+					) {
+						// Refresh the read-only preview's own buffer. Do not register it
+						// as a writable sync document or request a save.
+						view.data = text;
+						view.previewMode.set(text, false);
+					}
+					view.previewMode.rerender(true);
+				}
+			});
+		});
+	}
+
+	private async refreshReadingView(path: string): Promise<void> {
+		try {
+			const text = await this.sync.readCurrentText(path);
+			if (text !== null) this.refreshReadingViews([{ path, text }]);
+		} catch (error) {
+			console.error(
+				`Full Block Embed: unable to refresh Reading view for ${path}`,
+				error,
+			);
+		}
 	}
 
 	private async renderPreview(
@@ -470,13 +532,27 @@ export default class FullBlockEmbed extends Plugin {
 			new Notice(`Shared block ${id} already exists`);
 			return;
 		}
-		const body = selection.replace(/\n$/, '');
+		let body = selection.replace(/\n$/, '');
+		let replaceFrom = from;
+		let replaceTo = to;
+		const line = editor.getLine(from.line);
+		const prefix = editor.getRange({ line: from.line, ch: 0 }, from);
+		if (/^[ \t]*$/.test(prefix) && (selection || /^[ \t]*$/.test(line))) {
+			// Marker lines must not inherit whitespace that happened to be before
+			// the selection/cursor. Preserve that whitespace as selected content
+			// when wrapping text, but consume a wholly blank line when creating an
+			// empty block.
+			replaceFrom = { line: from.line, ch: 0 };
+			if (selection) body = prefix + body;
+			else if (from.line === to.line)
+				replaceTo = { line: to.line, ch: line.length };
+		}
 		editor.replaceRange(
 			`<!--#${id}+-->\n${body}\n<!--#${id}/-->`,
-			from,
-			to,
+			replaceFrom,
+			replaceTo,
 		);
-		if (!body) editor.setCursor({ line: from.line + 1, ch: 0 });
+		if (!body) editor.setCursor({ line: replaceFrom.line + 1, ch: 0 });
 	}
 	private async insertSharedBlock(editor: Editor): Promise<void> {
 		const blocks = await this.sync.getSources();

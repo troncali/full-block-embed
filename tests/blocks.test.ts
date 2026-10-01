@@ -108,6 +108,54 @@ test('identical outside edits in every copy advance the baseline', () => {
 		assert.equal(plan.next.example, contentFingerprint(value));
 	}
 });
+test('matching copies recover after a cached conflict', () => {
+	const conflicted = planSync(
+		files('Source conflict', 'Reference conflict'),
+		{ example: contentFingerprint('Old') },
+		{ 'Ref.md\u0000example\u00000': true },
+		undefined,
+		new Set(),
+	);
+	assert.ok(conflicted.errors.length);
+
+	const recovered = planSync(
+		files('Resolved', 'Resolved'),
+		conflicted.next,
+		conflicted.nextRefs,
+		undefined,
+		new Set(),
+	);
+	assert.deepEqual(recovered.errors, []);
+	assert.deepEqual(recovered.patches, []);
+	assert.equal(recovered.next.example, contentFingerprint('Resolved'));
+});
+test('an approved editor edit overrides a stale reading copy and baseline', () => {
+	const input = files('Editor change', 'Stale reading copy');
+	const plan = planSync(
+		input,
+		{ example: contentFingerprint('Different cached baseline') },
+		{ 'Ref.md\u0000example\u00000': true },
+		undefined,
+		new Set([sourceChangeKey('Source.md', 'example')]),
+	);
+	assert.deepEqual(plan.errors, []);
+	assert.equal(plan.patches.length, 1);
+	assert.equal(applyPatches(input[1].text, plan.patches), ref('Editor change'));
+});
+test('different approved editor edits still conflict', () => {
+	const plan = planSync(
+		files('Source edit', 'Reference edit'),
+		{ example: contentFingerprint('Old') },
+		{ 'Ref.md\u0000example\u00000': true },
+		undefined,
+		new Set([
+			sourceChangeKey('Source.md', 'example'),
+			referenceChangeKey('Ref.md', 'example', 0),
+		]),
+	);
+	assert.equal(plan.patches.length, 0);
+	assert.match(plan.errors[0], /conflicting edits/);
+});
 test('an edit made in Obsidian may propagate, including clearing a block', () => {
 	const known = { 'Ref.md\u0000example\u00000': true };
 	const cleared = files('Original', '');
@@ -567,6 +615,30 @@ test('compact markers parse both kinds with exact body offsets', () => {
 			);
 		}
 	}
+});
+
+test('markers accept CommonMark indentation without becoming orphaned', () => {
+	const text =
+		'Before\n <!--#example+-->\nBody\n   <!--#example/-->\nAfter\n';
+	const result = parseFile('Note.md', text);
+	assert.deepEqual(result.errors, []);
+	assert.equal(result.blocks.length, 1);
+	assert.equal(result.blocks[0].kind, '+');
+	assert.equal(result.blocks[0].body, 'Body');
+});
+
+test('indented nested source markers project to references', () => {
+	const body = '   <!--#child+-->\nNested\n   <!--#child/-->';
+	assert.equal(
+		referenceBody(body),
+		'   <!--#child=-->\nNested\n   <!--#child/-->',
+	);
+});
+
+test('four-space-indented markers remain ordinary Markdown', () => {
+	const text =
+		'    <!--#example+-->\n    Body\n    <!--#example/-->\n';
+	assert.deepEqual(parseFile('Note.md', text), { blocks: [], errors: [] });
 });
 
 test('invalid compact markers pause all synchronization writes', () => {

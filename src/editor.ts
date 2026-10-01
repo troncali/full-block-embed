@@ -108,6 +108,13 @@ class ReferenceEditorWidget extends WidgetType {
 		referenceEditors.delete(dom);
 	}
 
+	updateDOM(dom: HTMLElement): boolean {
+		return (
+			referenceEditors.get(dom)?.update(this.block, this.livePreview) ??
+			false
+		);
+	}
+
 	ignoreEvent(): boolean {
 		return true;
 	}
@@ -236,20 +243,11 @@ export function editingExtension(actions: EditingActions): Extension {
 				const path = update.state.field(editorInfoField, false)?.file
 					?.path;
 				if (update.docChanged || oldPath !== path)
-					this.publish(
-						update.docChanged &&
-							update.transactions.some((transaction) =>
-								[
-									'input',
-									'delete',
-									'move',
-									'undo',
-									'redo',
-								].some((event) =>
-									transaction.isUserEvent(event),
-								),
-							),
-					);
+					// A document transaction in an Obsidian editor is an approved
+					// in-app change even when Obsidian or an input method omits the
+					// CodeMirror user-event annotation. Filesystem changes still take
+					// the guarded outside-edit path because they do not pass here.
+					this.publish(update.docChanged);
 			}
 
 			destroy(): void {

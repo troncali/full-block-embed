@@ -2,6 +2,7 @@ import {
 	App,
 	MarkdownPostProcessorContext,
 	MarkdownRenderChild,
+	MarkdownView,
 	TFile,
 } from 'obsidian';
 import { parseFile, type ParseResult } from './blocks';
@@ -46,13 +47,17 @@ class RenderedNoteObserver extends MarkdownRenderChild {
 export class ReadingViewRenderer {
 	private parsedFiles = new Map<
 		string,
-		{ mtime: number; text: string; parsed: ParseResult }
+		{ text: string; parsed: ParseResult }
 	>();
 
 	constructor(
 		private app: App,
 		private actions: ReadingViewActions,
 	) {}
+
+	invalidate(path: string): void {
+		this.parsedFiles.delete(path);
+	}
 
 	private addReferenceControls(
 		host: HTMLElement,
@@ -62,6 +67,12 @@ export class ReadingViewRenderer {
 	): void {
 		host.addClass('full-block-embed-reference');
 		host.dataset.sharedBlockId = id;
+		if (
+			host.querySelector(
+				':scope > .full-block-embed-reading-controls',
+			)
+		)
+			return;
 		const controls = host.createDiv({
 			cls: 'full-block-embed-reading-controls',
 		});
@@ -102,7 +113,7 @@ export class ReadingViewRenderer {
 	): Promise<void> {
 		const file = this.app.vault.getAbstractFileByPath(ctx.sourcePath);
 		if (!(file instanceof TFile)) return;
-		const { text, parsed } = await this.readParsed(file);
+		const { text, parsed } = await this.readParsed(file, el);
 		if (parsed.blocks.length || parsed.errors.length)
 			ctx.addChild(
 				new RenderedNoteObserver(el, this.actions, file.path, text),
@@ -166,9 +177,18 @@ export class ReadingViewRenderer {
 				(a, b) =>
 					b.depth - a.depth || a.end - a.start - (b.end - b.start),
 			)[0]!;
-			this.addReferenceControls(el, ref.id, ctx, {
-				startLine: ref.startLine,
-			});
+			el.addClass('full-block-embed-reference');
+			el.dataset.sharedBlockId = ref.id;
+			// Obsidian often renders a block as several independent sections.
+			// Mark every section as belonging to the reference, but attach the
+			// controls only to the section containing its opening marker.
+			if (
+				section.lineStart <= ref.startLine &&
+				ref.startLine < section.lineEnd
+			)
+				this.addReferenceControls(el, ref.id, ctx, {
+					startLine: ref.startLine,
+				});
 			return;
 		}
 		const sources = blocks.filter(
@@ -191,13 +211,25 @@ export class ReadingViewRenderer {
 
 	private async readParsed(
 		file: TFile,
+		el: HTMLElement,
 	): Promise<{ text: string; parsed: ParseResult }> {
+		let text: string | undefined;
+		this.app.workspace.iterateAllLeaves((leaf) => {
+			const view = leaf.view;
+			if (
+				text === undefined &&
+				view instanceof MarkdownView &&
+				view.getMode() === 'preview' &&
+				view.file?.path === file.path &&
+				view.previewMode.containerEl.contains(el)
+			)
+				text = view.previewMode.get();
+		});
+		text ??= await this.app.vault.read(file);
 		const cached = this.parsedFiles.get(file.path);
-		if (cached?.mtime === file.stat.mtime) return cached;
-		const text = await this.app.vault.cachedRead(file);
+		if (cached?.text === text) return cached;
 		const parsed = parseFile(file.path, text);
 		this.parsedFiles.set(file.path, {
-			mtime: file.stat.mtime,
 			text,
 			parsed,
 		});

@@ -7,6 +7,7 @@ export interface Block {
 	body: string;
 	depth: number;
 	start: number;
+	markerStart: number;
 	end: number;
 	bodyStart: number;
 	bodyEnd: number;
@@ -43,8 +44,11 @@ export const referenceChangeKey = (
 ): string => `${path}\u0000${id}\u0000${ordinal}`;
 export const validId = (id: string): boolean =>
 	/^[A-Za-z][A-Za-z0-9-]{0,79}$/.test(id);
-const OPEN = /^<!--#([^\s]+)(\+|=)-->[ \t]*$/;
-const CLOSE = /^<!--#([^\s]+)\/-->[ \t]*$/;
+// CommonMark permits up to three leading spaces before block-level syntax.
+// Accept the same indentation here so a marker created from an indented
+// selection is not mistaken for ordinary text.
+const OPEN = /^ {0,3}<!--#([^\s]+)(\+|=)-->[ \t]*$/;
+const CLOSE = /^ {0,3}<!--#([^\s]+)\/-->[ \t]*$/;
 const FENCE = /^ {0,3}(`{3,}|~{3,})(.*)$/;
 interface Line {
 	text: string;
@@ -77,6 +81,7 @@ export function parseFile(path: string, text: string): ParseResult {
 		kind: Kind;
 		line: number;
 		start: number;
+		markerStart: number;
 		bodyStart: number;
 	}> = [];
 	const lines = linesOf(text);
@@ -116,6 +121,7 @@ export function parseFile(path: string, text: string): ParseResult {
 				kind: begin[2] as Kind,
 				line: i,
 				start: currentLine.start,
+				markerStart: currentLine.start + line.indexOf('<'),
 				bodyStart: currentLine.next,
 			});
 		} else if (end) {
@@ -137,6 +143,7 @@ export function parseFile(path: string, text: string): ParseResult {
 					body,
 					depth: open.length - 1,
 					start: current.start,
+					markerStart: current.markerStart,
 					end: currentLine.next,
 					bodyStart: current.bodyStart,
 					bodyEnd,
@@ -147,7 +154,7 @@ export function parseFile(path: string, text: string): ParseResult {
 			}
 			// Ignore a marker while the user is still typing it. Once the HTML
 			// comment is closed, a marker-shaped line must be valid.
-		} else if (/^<!--#.*-->[ \t]*$/.test(line)) {
+		} else if (/^ {0,3}<!--#.*-->[ \t]*$/.test(line)) {
 			errors.push(`${path}:${i + 1}: malformed shared block marker`);
 		}
 	}
@@ -181,7 +188,7 @@ export function canonicalBlockBody(
 }
 
 function markerKindPosition(block: Block): number {
-	return block.start + `<!--#${block.id}`.length;
+	return block.markerStart + `<!--#${block.id}`.length;
 }
 
 function replaceCharacters(
@@ -275,6 +282,7 @@ function assertCurrentBlock(text: string, block: Block, action: string): void {
 			candidate.id === block.id &&
 			candidate.kind === block.kind &&
 			candidate.start === block.start &&
+			candidate.markerStart === block.markerStart &&
 			candidate.end === block.end &&
 			candidate.bodyStart === block.bodyStart &&
 			candidate.bodyEnd === block.bodyEnd,
@@ -381,6 +389,75 @@ export function planSync(
 				nextRefs[key] = true;
 				refKeys.set(b, key);
 			}
+		const applyChosen = (chosen: string): void => {
+			next[id] = contentFingerprint(chosen);
+			for (const b of blocks) {
+				if (contentOf(b) === chosen) continue;
+				const text = textByPath.get(b.path)!;
+				const newline = text.includes('\r\n') ? '\r\n' : '\n';
+				let target = chosen;
+				if (b.kind === '+') {
+					const restored = restoreNestedSources(
+						chosen,
+						b,
+						blocksByPath.get(b.path)!,
+					);
+					if (restored.body === undefined) {
+						errors.push(
+							`${id}: edited copy no longer contains nested source ${restored.missing!.id}`,
+						);
+						continue;
+					}
+					target = restored.body;
+				}
+				const replacement =
+					normalize(target).replace(/\n/g, newline) + newline;
+				patches.push({
+					path: b.path,
+					from: b.bodyStart,
+					to: b.bodyEnd,
+					oldBody: text.slice(b.bodyStart, b.bodyEnd),
+					body: replacement,
+				});
+			}
+		};
+		// Equality is an explicit conflict reset. Once every current copy agrees,
+		// accept that content and replace any stale persisted baseline instead of
+		// allowing an earlier conflict to remain latched indefinitely.
+		if (allCopiesMatch) {
+			applyChosen(contentOf(source));
+			continue;
+		}
+		if (allowedChanges !== undefined) {
+			const approved = new Map<string, string>();
+			for (const block of blocks) {
+				const key =
+					block.kind === '+'
+						? sourceChangeKey(block.path, id)
+						: refKeys.get(block)!;
+				if (!allowedChanges.has(key)) continue;
+				const content = contentOf(block);
+				const fingerprint = contentFingerprint(content);
+				const collision = approved.get(fingerprint);
+				if (collision !== undefined && collision !== content) {
+					errors.push(`${id}: content fingerprint collision`);
+					continue;
+				}
+				approved.set(fingerprint, content);
+			}
+			if (approved.size > 1) {
+				errors.push(
+					`${id}: conflicting edits in ${blocks.map((b) => b.path).join(', ')}`,
+				);
+				continue;
+			}
+			if (approved.size === 1) {
+				// An explicit edit in an Obsidian editor is authoritative. Reading
+				// views and delayed saves must not turn its older copies into conflicts.
+				applyChosen([...approved.values()][0]!);
+				continue;
+			}
+		}
 		const base = storedFingerprint(previous[id]);
 		const candidates = new Map<string, string>();
 		const approvedFingerprints = new Set<string>();
@@ -443,36 +520,7 @@ export function planSync(
 			candidates.size === 1
 				? [...candidates.values()][0]!
 				: contentOf(source);
-		next[id] = contentFingerprint(chosen);
-		for (const b of blocks) {
-			if (contentOf(b) === chosen) continue;
-			const text = textByPath.get(b.path)!;
-			const newline = text.includes('\r\n') ? '\r\n' : '\n';
-			let target = chosen;
-			if (b.kind === '+') {
-				const restored = restoreNestedSources(
-					chosen,
-					b,
-					blocksByPath.get(b.path)!,
-				);
-				if (restored.body === undefined) {
-					errors.push(
-						`${id}: edited copy no longer contains nested source ${restored.missing!.id}`,
-					);
-					continue;
-				}
-				target = restored.body;
-			}
-			const replacement =
-				normalize(target).replace(/\n/g, newline) + newline;
-			patches.push({
-				path: b.path,
-				from: b.bodyStart,
-				to: b.bodyEnd,
-				oldBody: text.slice(b.bodyStart, b.bodyEnd),
-				body: replacement,
-			});
-		}
+		applyChosen(chosen);
 	}
 	// Never make partial cross-block edits when any block conflicts.
 	if (errors.length)
